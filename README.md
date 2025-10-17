@@ -7,8 +7,10 @@ This README documents how the training script `model_training.py` works, how to 
 ## Files of interest
 - `eda.py` - EDA and preprocessing helper (creates cleaned DataFrame, encoders, and can standardize numeric columns).
 - `eda_visualization.ipynb` - Jupyter notebook with exploratory plots and interactive EDA.
-- `model_training.py` - Training script that trains multiple classifiers and saves artifacts (models + metadata).
-- `models/` - output folder where trained models and metadata are written.
+- `model_training.py` - Training script that trains multiple classifiers, evaluates with cross-validation, and saves artifacts in `models/`.
+- `model_validation.py` - Small helper to load a saved model and run a single-row prediction for sanity checks.
+- `models/` - output folder where trained models and metadata are written (saved as `.joblib` + `_metadata.json`).
+- `Deployment/` - a minimal serving example (contains `app.py`, `Dockerfile`, and a `requirements.txt`) you can adapt for containerized serving or Cloud Run / Vertex AI custom container deployment.
 
 ## model_training.py — overview
 
@@ -24,9 +26,9 @@ Key behaviors:
 - Model selection: models are ranked by cross-validation mean (or F1 if CV is unavailable) and the top model is saved as `models/best_model.joblib` with a JSON metadata file.
 
 ## What the script saves
-- `models/<ModelName>.joblib` — the joblib artifact containing `{'pipeline': Pipeline, 'features': [...column names...]}`. The pipeline includes preprocessing and the classifier.
+- `models/<ModelName>.joblib` — the joblib artifact containing the saved pipeline (preprocessing + estimator) and metadata keys (we save the pipeline object and the `features` list).
 - `models/<ModelName>_metadata.json` — small JSON with python & scikit-learn versions, timestamp, and features.
-- `models/best_model.joblib` and `models/best_model_metadata.json` — the selected model and metadata.
+- `models/best_model.joblib` and `models/best_model_metadata.json` — the selected best model and metadata.
 
 Why joblib: joblib is recommended for scikit-learn artifacts because it efficiently serializes NumPy arrays and supports compression.
 
@@ -52,48 +54,111 @@ If you have uv you can also run:
 python model_training.py
 ```
 
-or
+or (if you use `uv` helper):
 
 ```bash
 uv run python model_training.py
 ```
 
-The script will read `loan_data.csv` by default and write models into the `models/` folder.
+The script will read `loan_data.csv` (or the CSV you supply) and write models into the `models/` folder.
 
 ## Load a saved model for inference
 
-There is a small helper script `model_validation.py` included to quickly sanity-check a saved model. It:
+There is a helper script `model_validation.py` to sanity-check a saved model. It:
 
 - Loads `models/best_model.joblib` (expects keys `pipeline` and `features`).
 - Builds a single-row pandas DataFrame from a sample record, fills any missing features with NaN so the pipeline imputers can handle them, and reorders columns to match the trained features.
 - Runs `pipeline.predict` and (if available) `pipeline.predict_proba`, then prints results.
 
-Use this sample CSV / row values as a test input (single row):
-
-```
-person_age,person_gender,person_education,person_income,person_emp_exp,person_home_ownership,loan_amnt,loan_intent,loan_int_rate,loan_percent_income,cb_person_cred_hist_length,credit_score,previous_loan_defaults_on_file
-34.0,female,Bachelor,97265.0,11,MORTGAGE,15000.0,PERSONAL,12.73,0.15,9.0,631,No
-```
-
-Run the validator:
+Example usage:
 
 ```bash
 python model_validation.py
 ```
 
-Notes:
-- Ensure `models/best_model.joblib` exists (run `model_training.py` first).
-- Categorical values must match those used during training (case/spelling).
-- If preprocessing was performed outside the saved pipeline, apply identical transforms before calling `predict`.
+Make sure the categorical values in your sample match training text (case/spelling). If any preprocessing was done outside the saved pipeline (not recommended), you must reproduce it prior to prediction.
 
-## Details for deployment
-- The model will be deployed on Google Cloud using one of two methods:
-  - Vertex AI with a prebuilt Scikit-learn container for managed deployment and easy endpoint creation
-  - Cloud Run with a custom Docker container for greater flexibility and automatic scaling to zero during idle periods
+## Details for deployment (Deployment/)
 
-## Next improvements
+This repo includes a `Deployment/` folder with a minimal FastAPI app and Dockerfile to help you build a container to serve the saved pipeline. Two common options:
 
-- Add a `predict_server.py` or FastAPI app for containerized serving.
+- Vertex AI: Ipload the trained model (model.joblib) to the Vertex AI Model Registry and deployed as an endpoint for online prediction
+- Cloud Run: build and push the Docker image that uses `Deployment/app.py` (FastAPI) and `Deployment/requirements.txt`.
+
+Quick serve locally (in the virtualenv):
+
+```bash
+pip install -r Deployment/requirements.txt
+uvicorn Deployment.app:app --host 0.0.0.0 --port 8080
+```
+
+The service accepts JSON POST requests (see `Deployment/app.py`) and internally converts incoming arrays to DataFrames using the saved `features` list so the pipeline can run reliably.
+
+## API Access
+
+The trained Random Forest model has been deployed as a FastAPI application using Google Cloud Run.
+It provides a public REST API endpoint for real-time loan approval prediction.
+
+### How to Test
+
+```bash
+curl -X POST "https://loan-api-963580054894.us-central1.run.app/predict" \
+-H "Content-Type: application/json" \
+-d @sample_payload.json
+```
+
+### Endpint
+
+```bash
+https://loan-api-963580054894.us-central1.run.app/predict
+```
+
+### Sample payload
+
+```json
+{
+  "instances": [
+    {
+      "person_age": 22.0,
+      "person_gender": "male",
+      "person_education": "Master",
+      "person_income": 66135.0,
+      "person_emp_exp": 1,
+      "person_home_ownership": "RENT",
+      "loan_amnt": 35000.0,
+      "loan_intent": "MEDICAL",
+      "loan_int_rate": 14.27,
+      "loan_percent_income": 0.53,
+      "cb_person_cred_hist_length": 4.0,
+      "credit_score": 586,
+      "previous_loan_defaults_on_file": "NO"
+    },
+    {
+      "person_age": 22.0,
+      "person_gender": "female",
+      "person_education": "Master",
+      "person_income": 71948.0,
+      "person_emp_exp": 0,
+      "person_home_ownership": "RENT",
+      "loan_amnt": 35000.0,
+      "loan_intent": "PERSONAL",
+      "loan_int_rate": 16.02,
+      "loan_percent_income": 0.49,
+      "cb_person_cred_hist_length": 3.0,
+      "credit_score": 561,
+      "previous_loan_defaults_on_file": "NO"
+    }
+  ]
+}
+```
+
+### Example Response
+
+```json
+{
+  "predictions": [0, 1]
+}
+```
 
 ## 📊 Data Source & License
 
