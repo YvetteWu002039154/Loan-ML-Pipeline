@@ -40,7 +40,6 @@ class EDAProcessor:
         self.csv_path = csv_path
         self.gender_le = None
         self.load_defaults_le = None
-        self.scaler = None
     
     def load_and_process(self):
         df = pd.read_csv(self.csv_path)
@@ -57,14 +56,6 @@ class EDAProcessor:
         self.gender_le = gender_le
         self.load_defaults_le = load_defaults_le
         df = pd.get_dummies(df, columns=["loan_intent"], drop_first=True)
-
-        if len(num_cols) > 0:
-            num_cols = num_cols.drop("loan_status")
-            df[num_cols] = df[num_cols].apply(pd.to_numeric, errors="coerce")
-            df[num_cols] = df[num_cols].fillna(df[num_cols].median())
-            scaler = StandardScaler()
-            df[num_cols] = scaler.fit_transform(df[num_cols])
-            self.scaler = scaler
 
         # Feature engineering
         df["person_education"] = df["person_education"].apply(_classify_education)
