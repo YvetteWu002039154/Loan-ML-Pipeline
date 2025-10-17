@@ -33,6 +33,9 @@ def load_df(csv_path="loan_data.csv"):
 def build_preprocessor(X):
     num_cols = X.select_dtypes(include=[np.number]).columns.tolist()
     cat_cols = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+    
+    num_indices = [X.columns.get_loc(c) for c in num_cols]
+    cat_indices = [X.columns.get_loc(c) for c in cat_cols]
 
     num_pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
@@ -43,8 +46,8 @@ def build_preprocessor(X):
         ("ohe", OneHotEncoder(handle_unknown="ignore"))
     ])
     preproc = ColumnTransformer([
-        ("num", num_pipe, num_cols),
-        ("cat", cat_pipe, cat_cols)
+        ("num", num_pipe, num_indices),
+        ("cat", cat_pipe, cat_indices)
     ], remainder="drop")
     return preproc
 
@@ -86,6 +89,7 @@ def train_and_select(csv_path="loan_data.csv", target_col="loan_status", test_si
     df = df.dropna(subset=[target_col])
     y = df[target_col].astype(int)
     X = df.drop(columns=[target_col])
+    all_features = X.columns.tolist()
 
     preproc = build_preprocessor(X)
 
@@ -100,12 +104,12 @@ def train_and_select(csv_path="loan_data.csv", target_col="loan_status", test_si
 
     for name, clf in classifiers.items():
         pipe = Pipeline([("pre", preproc), ("clf", clf)])
-        pipe.fit(X_train, y_train)
-        y_pred = pipe.predict(X_test)
+        pipe.fit(X_train.values, y_train)
+        y_pred = pipe.predict(X_test.values)
         y_proba = None
         if hasattr(pipe.named_steps["clf"], "predict_proba"):
             try:
-                y_proba = pipe.predict_proba(X_test)
+                y_proba = pipe.predict_proba(X_test.values)
             except Exception:
                 y_proba = None
         metrics = compute_metrics(y_test, y_pred, y_proba, average_metric="macro")
@@ -122,14 +126,14 @@ def train_and_select(csv_path="loan_data.csv", target_col="loan_status", test_si
         results.append(metrics)
         # save model artifact (use .joblib) and metadata
         model_path = Path(out_dir) / f"{name}.joblib"
-        joblib.dump({"pipeline": pipe, "features": X.columns.tolist()}, model_path, compress=3)
+        joblib.dump(pipe, model_path, compress=3)
         # write metadata for reproducibility
         metadata = {
             "model": name,
             "saved_at": datetime.utcnow().isoformat() + "Z",
             "python_version": sys.version.split()[0],
             "sklearn_version": sklearn.__version__,
-            "features": X.columns.tolist(),
+            "features": all_features,
         }
         (Path(out_dir) / f"{name}_metadata.json").write_text(json.dumps(metadata, indent=2))
 
@@ -142,16 +146,16 @@ def train_and_select(csv_path="loan_data.csv", target_col="loan_status", test_si
         best = results_df.sort_values(by="f1", ascending=False).iloc[0]
 
     best_name = best["model"]
-    best_model = joblib.load(Path(out_dir)/f"{best_name}.joblib")["pipeline"]
+    best_model = joblib.load(Path(out_dir)/f"{best_name}.joblib")
     best_path = Path(out_dir) / "best_model.joblib"
-    joblib.dump({"pipeline": best_model, "features": X.columns.tolist(), "best_by": "f1"}, best_path, compress=3)
+    joblib.dump(best_model, best_path, compress=3)
     best_meta = {
         "selected_model": best_name,
         "selected_by": "f1",
         "saved_at": datetime.utcnow().isoformat() + "Z",
         "python_version": sys.version.split()[0],
         "sklearn_version": sklearn.__version__,
-        "features": X.columns.tolist()
+        "features": all_features
     }
     (Path(out_dir) / "best_model_metadata.json").write_text(json.dumps(best_meta, indent=2))
 
