@@ -1,0 +1,22 @@
+{
+  "selected_model": "RandomForest",
+  "selected_by": "f1",
+  "saved_at": "2025-10-17T20:58:40.435371Z",
+  "python_version": "3.9.6",
+  "sklearn_version": "1.6.1",
+  "features": [
+    "person_age",
+    "person_gender",
+    "person_education",
+    "person_income",
+    "person_emp_exp",
+    "person_home_ownership",
+    "loan_amnt",
+    "loan_intent",
+    "loan_int_rate",
+    "loan_percent_income",
+    "cb_person_cred_hist_length",
+    "credit_score",
+    "previous_loan_defaults_on_file"
+  ]
+}
