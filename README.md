@@ -160,6 +160,47 @@ https://loan-api-963580054894.us-central1.run.app/predict
 }
 ```
 
+### UI Page
+
+The project includes a simple Streamlit frontend at `Deployment/frontend_page.py` that lets you interactively enter loan/person fields and call the prediction API.
+
+What it does
+- Renders input widgets (sliders, selectboxes, number inputs) for the feature set used by the model.
+- Sends a JSON POST to the FastAPI predict endpoint (configured via `PREDICT_URL` at the top of the file).
+
+Where the file is
+- `Deployment/frontend_page.py`
+
+Dependencies
+- The Streamlit app requires `streamlit` and `requests` (plus the usual data libs if you run locally):
+
+```bash
+python -m pip install streamlit requests
+```
+
+How to run locally (with local backend)
+1. Start the FastAPI backend that serves the model (if you want local inference):
+
+```bash
+# in one terminal (activate your venv first)
+uvicorn Deployment.app:app --reload --port 8000
+```
+
+2. Start the Streamlit UI (in another terminal, in project root):
+
+```bash
+python -m streamlit run Deployment/frontend_page.py
+```
+
+3. Open the browser at the URL shown by Streamlit. The app will post to the `PREDICT_URL` defined at top of `frontend_page.py` — update it to `http://localhost:8000/predict` if you're running the backend locally.
+
+Quick run (no backend)
+- If you only want to demo the UI without a working API, you can still run Streamlit but the predict action will fail unless `PREDICT_URL` points to a live endpoint. For a quick smoke test, set `PREDICT_URL` to a mock endpoint or comment out the POST call and print the constructed JSON instead.
+
+Notes
+- Make sure `PREDICT_URL` in `Deployment/frontend_page.py` points to the correct API (Cloud Run/Vertex or your local `uvicorn` instance).
+- For production, you can serve both FastAPI and Streamlit in separate containers, or host the Streamlit UI as a static build (Streamlit sharing / Streamlit Cloud) and call the FastAPI endpoint.
+
 ## 📊 Data Source & License
 
 The dataset used in this project originates from [Kaggle](https://www.kaggle.com/), titled **"Loan Approval Classification Dataset"**, and is provided under the **Apache 2.0 License**.
