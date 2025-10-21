@@ -164,6 +164,9 @@ https://loan-api-963580054894.us-central1.run.app/predict
 
 The project includes a simple Streamlit frontend at `Deployment/frontend_page.py` that lets you interactively enter loan/person fields and call the prediction API.
 
+You can find a deployed template in the following link:
+https://loan-ml-ui-20251021v1.streamlit.app/
+
 What it does
 - Renders input widgets (sliders, selectboxes, number inputs) for the feature set used by the model.
 - Sends a JSON POST to the FastAPI predict endpoint (configured via `PREDICT_URL` at the top of the file).
